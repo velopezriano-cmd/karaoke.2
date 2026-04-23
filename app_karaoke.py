@@ -27,14 +27,22 @@ st.title("🎤 Karaoke Official Stream")
 
 col1, col2 = st.columns(2)
 with col1:
-    cancion = st.text_input("🎵 Canción", placeholder="Ej: Ni borracho")
+    cancion = st.text_input("🎵 Canción o Link de YT", placeholder="Ej: Hentai o https://...")
 with col2:
-    artista = st.text_input("🎤 Artista", placeholder="Ej: Quevedo")
+    artista = st.text_input("🎤 Artista", placeholder="Ej: Rosalía")
 
 def buscar_video_api(query):
+    # Si el usuario ya puso un link, extraemos el ID
+    if "youtube.com/watch?v=" in query:
+        return query.split("v=")[1].split("&")[0]
+    if "youtu.be/" in query:
+        return query.split("/")[-1].split("?")[0]
+        
     try:
         youtube = build('youtube', 'v3', developerKey=API_KEY)
-        request = youtube.search().list(q=query, part='snippet', maxResults=1, type='video')
+        # Refinamos la búsqueda para forzar instrumental
+        query_refinada = f"{query} karaoke instrumental oficial no vocal"
+        request = youtube.search().list(q=query_refinada, part='snippet', maxResults=1, type='video')
         response = request.execute()
         if response['items']:
             return response['items'][0]['id']['videoId']
@@ -42,13 +50,16 @@ def buscar_video_api(query):
     except: return None
 
 if st.button("🚀 PREPARAR ESCENARIO"):
-    if cancion and artista:
+    if cancion:
         with st.spinner("📡 Sincronizando escenario..."):
-            video_id = buscar_video_api(f"{cancion} {artista} karaoke instrumental")
+            # Si el input es un link, no usamos el artista para la búsqueda de video
+            termino_video = cancion if "youtube" in cancion else f"{cancion} {artista}"
+            video_id = buscar_video_api(termino_video)
+            
+            # Para la letra siempre usamos nombre + artista
             lrc_data = syncedlyrics.search(f"{cancion} {artista}", providers=['lrclib'])
 
             if video_id and lrc_data:
-                # Parsear letras
                 lyrics_list = []
                 for line in lrc_data.split('\n'):
                     match = re.search(r'\[(\d+):(\d+\.\d+)\](.*)', line)
@@ -59,10 +70,8 @@ if st.button("🚀 PREPARAR ESCENARIO"):
                 
                 lyrics_json = json.dumps(lyrics_list)
 
-                # 1. MOSTRAR EL VIDEO (Usando el widget nativo de Streamlit para que el Play sea visible)
                 st.video(f"https://www.youtube.com/watch?v={video_id}")
 
-                # 2. CAJA DE LETRAS (JavaScript busca el video nativo de Streamlit)
                 st.markdown(f"""
                     <div class="lyric-box">
                         <h1 id="lyric-text" style="color: white; font-size: 35px; min-height: 50px;">¡Dale al Play arriba!</h1>
@@ -70,7 +79,6 @@ if st.button("🚀 PREPARAR ESCENARIO"):
                     </div>
 
                     <script>
-                        // Función para buscar el video de Streamlit y sincronizar
                         const syncLyrics = () => {{
                             const video = window.parent.document.querySelector('video');
                             const lyrics = {lyrics_json};
@@ -92,9 +100,8 @@ if st.button("🚀 PREPARAR ESCENARIO"):
                                 }};
                             }}
                         }};
-                        // Intentamos conectar con el video tras un breve delay
-                        setTimeout(syncLyrics, 2000);
+                        setTimeout(syncLyrics, 2500);
                     </script>
                 """, unsafe_allow_html=True)
             else:
-                st.error("No se pudo encontrar el video o la letra sincronizada.")
+                st.error("No se pudo encontrar el video o la letra.")
