@@ -41,18 +41,18 @@ if st.button("🚀 PREPARAR KARAOKE"):
                 
                 query = f"ytsearch1:{cancion} {artista} karaoke instrumental version"
                 
-                # --- SOLUCIÓN PUNTO 2: CONFIGURACIÓN ANTIBLOQUEO ---
-                resultado = subprocess.run([
-                    "yt-dlp", 
-                    "-x", 
-                    "--audio-format", "mp3", 
-                    "--audio-quality", "0", 
-                    "--no-check-certificate", 
-                    "--prefer-free-formats",
-                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "-o", audio_file, 
-                    query
-                ], capture_output=True, text=True)
+              # --- CONFIGURACIÓN ANTIBLOQUEO ACTUALIZADA ---
+resultado = subprocess.run([
+    "yt-dlp", 
+    "-x", 
+    "--audio-format", "mp3", 
+    "--audio-quality", "0", 
+    "--no-check-certificate", 
+    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "--extractor-args", "youtube:player_client=android", # Usa el cliente de Android que suele estar menos bloqueado
+    "-o", audio_file, 
+    query
+], capture_output=True, text=True)
 
                 # Verificar si se descargó
                 if not os.path.exists(audio_file):
