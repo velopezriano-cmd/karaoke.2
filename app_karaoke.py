@@ -8,7 +8,7 @@ import syncedlyrics
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Vega's Karaoke Streamlit", page_icon="🎤", layout="centered")
 
-# CSS para estilo Spotify Dark
+# Estilo visual Spotify Dark
 st.markdown("""
     <style>
     .main { background-color: #121212; color: white; }
@@ -17,13 +17,12 @@ st.markdown("""
         background-color: #1DB954; color: white; border-radius: 50px; 
         font-weight: bold; border: none; padding: 12px 24px; width: 100%;
     }
-    .stButton>button:hover { background-color: #1ed760; color: white; border: none; }
-    h1, h2, h3, p { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    .stButton>button:hover { background-color: #1ed760; color: white; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🎤 Escenario Karaoke")
-st.write("Escribe el nombre de la canción y el artista para empezar el show.")
+st.write("Escribe la canción y el artista para generar el ritmo y la letra.")
 
 # --- ENTRADA DE DATOS ---
 col1, col2 = st.columns(2)
@@ -34,39 +33,38 @@ with col2:
 
 if st.button("🚀 PREPARAR KARAOKE"):
     if cancion and artista:
-        with st.spinner("🎸 Procesando pista instrumental y letras..."):
+        with st.spinner("🎸 Descargando ritmo (esto evita el error 403)..."):
             try:
-                # 1. Definir ruta del archivo
                 audio_file = "ritmo_final.mp3"
                 if os.path.exists(audio_file):
                     os.remove(audio_file)
                 
-                # 2. Descarga de Audio con yt-dlp
-                # Usamos filtros para asegurar que sea instrumental
                 query = f"ytsearch1:{cancion} {artista} karaoke instrumental version"
                 
+                # --- SOLUCIÓN PUNTO 2: CONFIGURACIÓN ANTIBLOQUEO ---
                 resultado = subprocess.run([
                     "yt-dlp", 
                     "-x", 
                     "--audio-format", "mp3", 
                     "--audio-quality", "0", 
+                    "--no-check-certificate", 
+                    "--prefer-free-formats",
+                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "-o", audio_file, 
                     query
                 ], capture_output=True, text=True)
 
-                # Verificar si el archivo se creó correctamente
+                # Verificar si se descargó
                 if not os.path.exists(audio_file):
-                    st.error("❌ No se pudo generar el archivo de audio.")
+                    st.error("❌ Error al descargar de YouTube (HTTP 403 o similar).")
                     with st.expander("Ver detalles técnicos del error"):
                         st.code(resultado.stderr)
-                    st.info("💡 Asegúrate de tener un archivo 'packages.txt' con 'ffmpeg' en tu GitHub.")
                     st.stop()
 
-                # 3. Obtener Letras Sincronizadas
+                # --- BÚSQUEDA DE LETRA ---
                 lrc_data = syncedlyrics.search(f"{cancion} {artista}", providers=['lrclib'])
                 
                 if lrc_data:
-                    # Convertir LRC a JSON para el script de sincronización
                     lyrics_list = []
                     for line in lrc_data.split('\n'):
                         match = re.search(r'\[(\d+):(\d+\.\d+)\](.*)', line)
@@ -77,62 +75,46 @@ if st.button("🚀 PREPARAR KARAOKE"):
                     
                     lyrics_json = json.dumps(lyrics_list)
 
-                    # 4. Mostrar Reproductor de Audio
+                    # Mostrar audio
                     audio_bytes = open(audio_file, 'rb').read()
                     st.audio(audio_bytes, format='audio/mp3')
 
-                    # 5. Contenedor de Letras y JavaScript de Sincronización
+                    # Pantalla de letra y JavaScript
                     st.markdown(f"""
-                        <div id="karaoke-screen" style="background: black; padding: 50px 20px; border-radius: 20px; border: 4px solid #1DB954; text-align: center; margin-top: 30px; min-height: 250px; display: flex; flex-direction: column; justify-content: center;">
-                            <p style="color: #1DB954; font-size: 14px; text-transform: uppercase; letter-spacing: 2px;">Canta ahora:</p>
-                            <h1 id="lyric-text" style="color: white; font-size: 42px; margin: 20px 0; line-height: 1.2;">¡Dale al Play arriba!</h1>
-                            <div style="margin-top: 30px; border-top: 1px solid #333; padding-top: 20px;">
-                                <p id="lyric-next" style="color: #6a6a6a; font-size: 20px; font-weight: normal;"></p>
-                            </div>
+                        <div id="karaoke-screen" style="background: black; padding: 40px; border-radius: 20px; border: 4px solid #1DB954; text-align: center; margin-top: 20px; min-height: 200px; display: flex; flex-direction: column; justify-content: center;">
+                            <h1 id="lyric-text" style="color: white; font-family: sans-serif; font-size: 40px; margin: 0;">¡Dale al Play!</h1>
+                            <p id="lyric-next" style="color: #535353; font-family: sans-serif; font-size: 20px; margin-top: 20px;"></p>
                         </div>
 
                         <script>
-                            // Función para sincronizar letras con el reproductor de Streamlit
-                            const syncKaraoke = () => {{
-                                const audio = window.parent.document.querySelector('audio');
-                                const lyrics = {lyrics_json};
-                                const textDisplay = window.parent.document.getElementById('lyric-text');
-                                const nextDisplay = window.parent.document.getElementById('lyric-next');
+                            const audio = window.parent.document.querySelector('audio');
+                            const lyrics = {lyrics_json};
+                            const display = window.parent.document.getElementById('lyric-text');
+                            const nextDisplay = window.parent.document.getElementById('lyric-next');
 
-                                if (audio) {{
-                                    audio.ontimeupdate = () => {{
-                                        const currentTime = audio.currentTime;
-                                        let activeIdx = -1;
-
-                                        for (let i = 0; i < lyrics.length; i++) {{
-                                            if (currentTime >= lyrics[i].time) {{
-                                                activeIdx = i;
-                                            }} else {{
-                                                break;
-                                            }}
+                            if (audio) {{
+                                audio.ontimeupdate = () => {{
+                                    let activeIdx = -1;
+                                    for (let i = 0; i < lyrics.length; i++) {{
+                                        if (audio.currentTime >= lyrics[i].time) {{
+                                            activeIdx = i;
+                                        }} else {{
+                                            break;
                                         }}
-
-                                        if (activeIdx !== -1) {{
-                                            textDisplay.innerText = lyrics[activeIdx].text;
-                                            if (lyrics[activeIdx + 1]) {{
-                                                nextDisplay.innerText = "Siguiente: " + lyrics[activeIdx + 1].text;
-                                            }} else {{
-                                                nextDisplay.innerText = "♪ (Fin) ♪";
-                                            }}
-                                        }}
-                                    }};
-                                }}
-                            }};
-                            
-                            // Ejecutar sincronización
-                            setTimeout(syncKaraoke, 1000);
+                                    }}
+                                    if (activeIdx !== -1) {{
+                                        display.innerText = lyrics[activeIdx].text;
+                                        nextDisplay.innerText = lyrics[activeIdx + 1] ? "Siguiente: " + lyrics[activeIdx + 1].text : "";
+                                    }}
+                                }};
+                            }}
                         </script>
                     """, unsafe_allow_html=True)
                 else:
-                    st.warning("⚠️ No se encontró letra sincronizada para esta canción. El audio sonará pero no habrá texto.")
+                    st.warning("No se encontró letra sincronizada.")
                     st.audio(audio_file)
 
             except Exception as e:
                 st.error(f"Error inesperado: {e}")
     else:
-        st.info("Escribe algo arriba y pulsa el botón para empezar.")
+        st.info("Introduce canción y artista.")
