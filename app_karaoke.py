@@ -33,7 +33,7 @@ with col2:
 
 if st.button("🚀 PREPARAR KARAOKE"):
     if cancion and artista:
-        with st.spinner("🎸 Descargando ritmo (esto evita el error 403)..."):
+        with st.spinner("🎸 Descargando ritmo (evitando bloqueos)..."):
             try:
                 audio_file = "ritmo_final.mp3"
                 if os.path.exists(audio_file):
@@ -41,78 +41,76 @@ if st.button("🚀 PREPARAR KARAOKE"):
                 
                 query = f"ytsearch1:{cancion} {artista} karaoke instrumental version"
                 
-              # --- CONFIGURACIÓN ANTIBLOQUEO ACTUALIZADA ---
-resultado = subprocess.run([
-    "yt-dlp", 
-    "-x", 
-    "--audio-format", "mp3", 
-    "--audio-quality", "0", 
-    "--no-check-certificate", 
-    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "--extractor-args", "youtube:player_client=android", # Usa el cliente de Android que suele estar menos bloqueado
-    "-o", audio_file, 
-    query
-], capture_output=True, text=True)
+                # --- CONFIGURACIÓN ANTIBLOQUEO MEJORADA ---
+                resultado = subprocess.run([
+                    "yt-dlp", 
+                    "-x", 
+                    "--audio-format", "mp3", 
+                    "--audio-quality", "0", 
+                    "--no-check-certificate", 
+                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                    "--extractor-args", "youtube:player_client=android",
+                    "-o", audio_file, 
+                    query
+                ], capture_output=True, text=True)
 
-                # Verificar si se descargó
                 if not os.path.exists(audio_file):
-                    st.error("❌ Error al descargar de YouTube (HTTP 403 o similar).")
+                    st.error("❌ Error al descargar de YouTube (HTTP 403).")
                     with st.expander("Ver detalles técnicos del error"):
                         st.code(resultado.stderr)
-                    st.stop()
-
-                # --- BÚSQUEDA DE LETRA ---
-                lrc_data = syncedlyrics.search(f"{cancion} {artista}", providers=['lrclib'])
-                
-                if lrc_data:
-                    lyrics_list = []
-                    for line in lrc_data.split('\n'):
-                        match = re.search(r'\[(\d+):(\d+\.\d+)\](.*)', line)
-                        if match:
-                            time_sec = int(match.group(1)) * 60 + float(match.group(2))
-                            text = match.group(3).strip()
-                            if text: lyrics_list.append({'time': time_sec, 'text': text})
-                    
-                    lyrics_json = json.dumps(lyrics_list)
-
-                    # Mostrar audio
-                    audio_bytes = open(audio_file, 'rb').read()
-                    st.audio(audio_bytes, format='audio/mp3')
-
-                    # Pantalla de letra y JavaScript
-                    st.markdown(f"""
-                        <div id="karaoke-screen" style="background: black; padding: 40px; border-radius: 20px; border: 4px solid #1DB954; text-align: center; margin-top: 20px; min-height: 200px; display: flex; flex-direction: column; justify-content: center;">
-                            <h1 id="lyric-text" style="color: white; font-family: sans-serif; font-size: 40px; margin: 0;">¡Dale al Play!</h1>
-                            <p id="lyric-next" style="color: #535353; font-family: sans-serif; font-size: 20px; margin-top: 20px;"></p>
-                        </div>
-
-                        <script>
-                            const audio = window.parent.document.querySelector('audio');
-                            const lyrics = {lyrics_json};
-                            const display = window.parent.document.getElementById('lyric-text');
-                            const nextDisplay = window.parent.document.getElementById('lyric-next');
-
-                            if (audio) {{
-                                audio.ontimeupdate = () => {{
-                                    let activeIdx = -1;
-                                    for (let i = 0; i < lyrics.length; i++) {{
-                                        if (audio.currentTime >= lyrics[i].time) {{
-                                            activeIdx = i;
-                                        }} else {{
-                                            break;
-                                        }}
-                                    }}
-                                    if (activeIdx !== -1) {{
-                                        display.innerText = lyrics[activeIdx].text;
-                                        nextDisplay.innerText = lyrics[activeIdx + 1] ? "Siguiente: " + lyrics[activeIdx + 1].text : "";
-                                    }}
-                                }};
-                            }}
-                        </script>
-                    """, unsafe_allow_html=True)
                 else:
-                    st.warning("No se encontró letra sincronizada.")
-                    st.audio(audio_file)
+                    # --- BÚSQUEDA DE LETRA ---
+                    lrc_data = syncedlyrics.search(f"{cancion} {artista}", providers=['lrclib'])
+                    
+                    if lrc_data:
+                        lyrics_list = []
+                        for line in lrc_data.split('\n'):
+                            match = re.search(r'\[(\d+):(\d+\.\d+)\](.*)', line)
+                            if match:
+                                time_sec = int(match.group(1)) * 60 + float(match.group(2))
+                                text = match.group(3).strip()
+                                if text: lyrics_list.append({'time': time_sec, 'text': text})
+                        
+                        lyrics_json = json.dumps(lyrics_list)
+
+                        # Mostrar audio
+                        audio_bytes = open(audio_file, 'rb').read()
+                        st.audio(audio_bytes, format='audio/mp3')
+
+                        # Pantalla de letra y JavaScript
+                        st.markdown(f"""
+                            <div id="karaoke-screen" style="background: black; padding: 40px; border-radius: 20px; border: 4px solid #1DB954; text-align: center; margin-top: 20px; min-height: 200px; display: flex; flex-direction: column; justify-content: center;">
+                                <h1 id="lyric-text" style="color: white; font-family: sans-serif; font-size: 40px; margin: 0;">¡Dale al Play!</h1>
+                                <p id="lyric-next" style="color: #535353; font-family: sans-serif; font-size: 20px; margin-top: 20px;"></p>
+                            </div>
+
+                            <script>
+                                const audio = window.parent.document.querySelector('audio');
+                                const lyrics = {lyrics_json};
+                                const display = window.parent.document.getElementById('lyric-text');
+                                const nextDisplay = window.parent.document.getElementById('lyric-next');
+
+                                if (audio) {{
+                                    audio.ontimeupdate = () => {{
+                                        let activeIdx = -1;
+                                        for (let i = 0; i < lyrics.length; i++) {{
+                                            if (audio.currentTime >= lyrics[i].time) {{
+                                                activeIdx = i;
+                                            }} else {{
+                                                break;
+                                            }}
+                                        }}
+                                        if (activeIdx !== -1) {{
+                                            display.innerText = lyrics[activeIdx].text;
+                                            nextDisplay.innerText = lyrics[activeIdx + 1] ? "Siguiente: " + lyrics[activeIdx + 1].text : "";
+                                        }}
+                                    }};
+                                }}
+                            </script>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.warning("No se encontró letra sincronizada.")
+                        st.audio(audio_file)
 
             except Exception as e:
                 st.error(f"Error inesperado: {e}")
