@@ -4,10 +4,15 @@ import re
 import json
 import subprocess
 import syncedlyrics
+from googleapiclient.discovery import build
 
-# --- 1. CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="Vega's Karaoke", page_icon="🎤", layout="centered")
+# --- CONFIGURACIÓN ---
+# PEGA TU CLAVE AQUÍ ABAJO:
+API_KEY = "AIzaSyDZgLBFuQeqBrEDc4OQrjFGkdGkuJNW73o"
 
+st.set_page_config(page_title="Vega's Karaoke PRO", page_icon="🎤", layout="centered")
+
+# Estilo visual Spotify Dark
 st.markdown("""
     <style>
     .main { background-color: #121212; color: white; }
@@ -20,55 +25,64 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🎤 Escenario Karaoke")
-st.write("Si YouTube bloquea por nombre, prueba a pegar el enlace directo del video de karaoke abajo.")
+st.title("🎤 Escenario Karaoke PRO")
+st.write("Búsqueda mediante API oficial de YouTube (Sin bloqueos)")
 
-# --- 2. ENTRADA DE DATOS ---
+# --- ENTRADA DE DATOS ---
 col1, col2 = st.columns(2)
 with col1:
-    cancion = st.text_input("🎵 Canción o URL de YouTube", placeholder="Ej: Hentai o https://youtube.com/...")
+    cancion = st.text_input("🎵 Canción", placeholder="Ej: Ni borracho")
 with col2:
-    artista = st.text_input("🎤 Artista", placeholder="Ej: Rosalía")
+    artista = st.text_input("🎤 Artista", placeholder="Ej: Quevedo")
 
-# --- 3. LÓGICA PRINCIPAL ---
+def buscar_video_api(query):
+    try:
+        youtube = build('youtube', 'v3', developerKey=API_KEY)
+        request = youtube.search().list(
+            q=query,
+            part='snippet',
+            maxResults=1,
+            type='video'
+        )
+        response = request.execute()
+        if response['items']:
+            video_id = response['items'][0]['id']['videoId']
+            return f"https://www.youtube.com/watch?v={video_id}"
+        return None
+    except Exception as e:
+        st.error(f"Error en la API de Google: {e}")
+        return None
+
 if st.button("🚀 PREPARAR KARAOKE"):
-    if cancion:
-        with st.spinner("🎸 Intentando conexión segura con YouTube..."):
+    if cancion and artista:
+        with st.spinner("📡 Consultando a Google y descargando ritmo..."):
             try:
+                # 1. Buscar el video oficial con la API
+                termino = f"{cancion} {artista} karaoke instrumental"
+                url_video = buscar_video_api(termino)
+                
+                if not url_video:
+                    st.error("No se encontró ningún video con ese nombre.")
+                    st.stop()
+
                 audio_file = "ritmo_final.mp3"
-                if os.path.exists(audio_file):
-                    os.remove(audio_file)
+                if os.path.exists(audio_file): os.remove(audio_file)
                 
-                # Si el usuario pega un link, lo usamos; si no, buscamos por nombre
-                query = cancion if "youtube.com" in cancion or "youtu.be" in cancion else f"ytsearch1:{cancion} {artista} karaoke instrumental"
-                
-                # --- CONFIGURACIÓN DE DESCARGA DE EMERGENCIA ---
-                # Añadimos --force-ipv4 y cambiamos a clientes web más ligeros
+                # 2. Descargar el audio (ya con el link directo es más difícil que falle)
                 resultado = subprocess.run([
-                    "yt-dlp", 
-                    "-x", 
-                    "--audio-format", "mp3", 
-                    "--audio-quality", "0", 
+                    "yt-dlp", "-x", "--audio-format", "mp3", 
                     "--no-check-certificate", 
-                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-                    "--extractor-args", "youtube:player_client=web_creator,mweb",
-                    "--force-ipv4",
-                    "--sleep-interval", "2", # Pequeña pausa para no parecer un bot
                     "-o", audio_file, 
-                    query
+                    url_video
                 ], capture_output=True, text=True)
 
                 if not os.path.exists(audio_file):
-                    st.error("❌ Bloqueo persistente de YouTube (403).")
-                    st.warning("💡 TRUCO: Busca el video de karaoke en YouTube desde tu móvil, copia el enlace y pégalo aquí arriba en el cuadro de 'Canción'.")
-                    with st.expander("Detalle técnico para Vega"):
-                        st.code(resultado.stderr)
+                    st.error("❌ Falló la descarga del audio.")
+                    with st.expander("Detalles"): st.code(resultado.stderr)
                     st.stop()
 
-                # --- BÚSQUEDA DE LETRA ---
-                # Usamos el nombre de la canción para la letra aunque hayamos usado un link para el audio
-                nombre_busqueda = cancion if "youtube" not in cancion else f"{cancion} {artista}"
-                lrc_data = syncedlyrics.search(nombre_busqueda, providers=['lrclib'])
+                # 3. Buscar letra
+                lrc_data = syncedlyrics.search(f"{cancion} {artista}", providers=['lrclib'])
                 
                 if lrc_data:
                     lyrics_list = []
@@ -84,9 +98,9 @@ if st.button("🚀 PREPARAR KARAOKE"):
                     st.audio(audio_bytes, format='audio/mp3')
 
                     st.markdown(f"""
-                        <div id="karaoke-screen" style="background: black; padding: 40px; border-radius: 20px; border: 4px solid #1DB954; text-align: center; margin-top: 20px; min-height: 200px; display: flex; flex-direction: column; justify-content: center;">
-                            <h1 id="lyric-text" style="color: white; font-family: sans-serif; font-size: 40px; margin: 0;">¡Dale al Play!</h1>
-                            <p id="lyric-next" style="color: #535353; font-family: sans-serif; font-size: 20px; margin-top: 20px;"></p>
+                        <div id="karaoke-screen" style="background: black; padding: 40px; border-radius: 20px; border: 4px solid #1DB954; text-align: center; margin-top: 20px;">
+                            <h1 id="lyric-text" style="color: white; font-size: 40px; margin: 0;">¡Dale al Play!</h1>
+                            <p id="lyric-next" style="color: #535353; font-size: 20px; margin-top: 20px;"></p>
                         </div>
                         <script>
                             const audio = window.parent.document.querySelector('audio');
@@ -109,10 +123,8 @@ if st.button("🚀 PREPARAR KARAOKE"):
                         </script>
                     """, unsafe_allow_html=True)
                 else:
-                    st.warning("No se encontró letra sincronizada, pero aquí tienes el ritmo.")
+                    st.warning("Letra no encontrada.")
                     st.audio(audio_file)
 
             except Exception as e:
                 st.error(f"Error inesperado: {e}")
-    else:
-        st.info("Introduce una canción o un enlace de YouTube.")
