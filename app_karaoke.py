@@ -1,27 +1,26 @@
 import streamlit as st
-import os
 import re
 import json
-import subprocess
 import syncedlyrics
+from googleapiclient.discovery import build
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Vega's Karaoke SoundCloud", page_icon="🎤", layout="centered")
+API_KEY = "AIzaSyDZgLBFuQeqBrEDc4OQrjFGkdGkuJNW73o"
+
+st.set_page_config(page_title="Vega's Karaoke Official", page_icon="🎤", layout="centered")
 
 st.markdown("""
     <style>
     .main { background-color: #121212; color: white; }
-    .stTextInput > div > div > input { background-color: #282828; color: white; border: 1px solid #ff5500; }
+    .stTextInput > div > div > input { background-color: #282828; color: white; border: 1px solid #1DB954; }
     .stButton>button { 
-        background-color: #ff5500; color: white; border-radius: 50px; 
-        font-weight: bold; border: none; padding: 12px 24px; width: 100%;
+        background-color: #1DB954; color: white; border-radius: 50px; font-weight: bold; width: 100%;
     }
-    .stButton>button:hover { background-color: #ff8800; color: white; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🎤 Escenario Karaoke (v. Soundcloud)")
-st.write("Usando SoundCloud para evitar los bloqueos de YouTube.")
+st.title("🎤 Karaoke Official Stream")
+st.write("Versión de alta fidelidad con reproductor oficial.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -29,74 +28,75 @@ with col1:
 with col2:
     artista = st.text_input("🎤 Artista", placeholder="Ej: Quevedo")
 
-if st.button("🚀 PREPARAR KARAOKE"):
+def buscar_video_api(query):
+    try:
+        youtube = build('youtube', 'v3', developerKey=API_KEY)
+        request = youtube.search().list(q=query, part='snippet', maxResults=1, type='video')
+        response = request.execute()
+        if response['items']:
+            return response['items'][0]['id']['videoId']
+        return None
+    except: return None
+
+if st.button("🚀 PREPARAR ESCENARIO"):
     if cancion and artista:
-        with st.spinner("📡 Buscando ritmo en SoundCloud..."):
-            try:
-                audio_file = "ritmo_final.mp3"
-                if os.path.exists(audio_file): os.remove(audio_file)
-                
-                # BUSCAMOS EN SOUNDCLOUD (Mucho menos bloqueos)
-                query = f"scsearch1:{cancion} {artista} karaoke instrumental"
-                
-                resultado = subprocess.run([
-                    "yt-dlp", 
-                    "-x", "--audio-format", "mp3", 
-                    "--no-check-certificate",
-                    "-o", audio_file, 
-                    query
-                ], capture_output=True, text=True)
+        with st.spinner("📡 Sincronizando escenario..."):
+            video_id = buscar_video_api(f"{cancion} {artista} karaoke instrumental")
+            lrc_data = syncedlyrics.search(f"{cancion} {artista}", providers=['lrclib'])
 
-                if os.path.exists(audio_file):
-                    # BÚSQUEDA DE LETRA
-                    lrc_data = syncedlyrics.search(f"{cancion} {artista}", providers=['lrclib'])
-                    
-                    if lrc_data:
-                        lyrics_list = []
-                        for line in lrc_data.split('\n'):
-                            match = re.search(r'\[(\d+):(\d+\.\d+)\](.*)', line)
-                            if match:
-                                time_sec = int(match.group(1)) * 60 + float(match.group(2))
-                                text = match.group(3).strip()
-                                if text: lyrics_list.append({'time': time_sec, 'text': text})
+            if video_id and lrc_data:
+                # Parsear letras
+                lyrics_list = []
+                for line in lrc_data.split('\n'):
+                    match = re.search(r'\[(\d+):(\d+\.\d+)\](.*)', line)
+                    if match:
+                        time_sec = int(match.group(1)) * 60 + float(match.group(2))
+                        text = match.group(3).strip()
+                        if text: lyrics_list.append({'time': time_sec, 'text': text})
+                
+                lyrics_json = json.dumps(lyrics_list)
+
+                # INTERFAZ DUAL: VIDEO + LETRAS
+                st.markdown(f"""
+                    <div id="video-placeholder"></div>
+                    <div style="background: black; padding: 30px; border-radius: 20px; border: 3px solid #1DB954; text-align: center; margin-top: 20px;">
+                        <h1 id="lyric-text" style="color: white; font-size: 35px; min-height: 50px;">¡Dale al Play!</h1>
+                        <p id="lyric-next" style="color: #535353; font-size: 18px;"></p>
+                    </div>
+
+                    <script src="https://www.youtube.com/iframe_api"></script>
+                    <script>
+                        var player;
+                        const lyrics = {lyrics_json};
                         
-                        lyrics_json = json.dumps(lyrics_list)
-                        st.audio(open(audio_file, 'rb').read(), format='audio/mp3')
-
-                        st.markdown(f"""
-                            <div id="karaoke-screen" style="background: black; padding: 40px; border-radius: 20px; border: 4px solid #ff5500; text-align: center; margin-top: 20px;">
-                                <h1 id="lyric-text" style="color: white; font-family: sans-serif; font-size: 40px; margin: 0;">¡Dale al Play!</h1>
-                                <p id="lyric-next" style="color: #535353; font-family: sans-serif; font-size: 20px; margin-top: 20px;"></p>
-                            </div>
-
-                            <script>
-                                const audio = window.parent.document.querySelector('audio');
-                                const lyrics = {lyrics_json};
-                                const display = window.parent.document.getElementById('lyric-text');
-                                const nextDisplay = window.parent.document.getElementById('lyric-next');
-
-                                if (audio) {{
-                                    audio.ontimeupdate = () => {{
-                                        let activeIdx = -1;
-                                        for (let i = 0; i < lyrics.length; i++) {{
-                                            if (audio.currentTime >= lyrics[i].time) activeIdx = i;
-                                            else break;
-                                        }}
-                                        if (activeIdx !== -1) {{
-                                            display.innerText = lyrics[activeIdx].text;
-                                            nextDisplay.innerText = lyrics[activeIdx + 1] ? "Siguiente: " + lyrics[activeIdx + 1].text : "";
-                                        }}
-                                    }};
+                        function onYouTubeIframeAPIReady() {{
+                            player = new YT.Player('video-placeholder', {{
+                                height: '360',
+                                width: '100%',
+                                videoId: '{video_id}',
+                                events: {{
+                                    'onStateChange': onPlayerStateChange
                                 }}
-                            </script>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.warning("Letra no encontrada, pero tienes el audio.")
-                        st.audio(audio_file)
-                else:
-                    st.error("No se pudo obtener el audio ni siquiera de SoundCloud.")
-                    with st.expander("Error técnico"):
-                        st.code(resultado.stderr)
+                            }});
+                        }}
 
-            except Exception as e:
-                st.error(f"Error: {e}")
+                        function onPlayerStateChange(event) {{
+                            if (event.data == YT.PlayerState.PLAYING) {{
+                                setInterval(function() {{
+                                    var currentTime = player.getCurrentTime();
+                                    var activeIdx = -1;
+                                    for (let i = 0; i < lyrics.length; i++) {{
+                                        if (currentTime >= lyrics[i].time) activeIdx = i;
+                                        else break;
+                                    }}
+                                    if (activeIdx !== -1) {{
+                                        window.parent.document.getElementById('lyric-text').innerText = lyrics[activeIdx].text;
+                                        window.parent.document.getElementById('lyric-next').innerText = lyrics[activeIdx+1] ? "Siguiente: " + lyrics[activeIdx+1].text : "";
+                                    }}
+                                }}, 500);
+                            }}
+                        }}
+                    </script>
+                """, unsafe_allow_html=True)
+            else:
+                st.error("No se pudo encontrar el video o la letra.")
