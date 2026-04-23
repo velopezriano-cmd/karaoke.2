@@ -16,11 +16,14 @@ st.markdown("""
     .stButton>button { 
         background-color: #1DB954; color: white; border-radius: 50px; font-weight: bold; width: 100%;
     }
+    .lyric-box {
+        background: black; padding: 30px; border-radius: 20px; 
+        border: 3px solid #1DB954; text-align: center; margin-top: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🎤 Karaoke Official Stream")
-st.write("Versión de alta fidelidad con reproductor oficial.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -56,47 +59,42 @@ if st.button("🚀 PREPARAR ESCENARIO"):
                 
                 lyrics_json = json.dumps(lyrics_list)
 
-                # INTERFAZ DUAL: VIDEO + LETRAS
+                # 1. MOSTRAR EL VIDEO (Usando el widget nativo de Streamlit para que el Play sea visible)
+                st.video(f"https://www.youtube.com/watch?v={video_id}")
+
+                # 2. CAJA DE LETRAS (JavaScript busca el video nativo de Streamlit)
                 st.markdown(f"""
-                    <div id="video-placeholder"></div>
-                    <div style="background: black; padding: 30px; border-radius: 20px; border: 3px solid #1DB954; text-align: center; margin-top: 20px;">
-                        <h1 id="lyric-text" style="color: white; font-size: 35px; min-height: 50px;">¡Dale al Play!</h1>
+                    <div class="lyric-box">
+                        <h1 id="lyric-text" style="color: white; font-size: 35px; min-height: 50px;">¡Dale al Play arriba!</h1>
                         <p id="lyric-next" style="color: #535353; font-size: 18px;"></p>
                     </div>
 
-                    <script src="https://www.youtube.com/iframe_api"></script>
                     <script>
-                        var player;
-                        const lyrics = {lyrics_json};
-                        
-                        function onYouTubeIframeAPIReady() {{
-                            player = new YT.Player('video-placeholder', {{
-                                height: '360',
-                                width: '100%',
-                                videoId: '{video_id}',
-                                events: {{
-                                    'onStateChange': onPlayerStateChange
-                                }}
-                            }});
-                        }}
+                        // Función para buscar el video de Streamlit y sincronizar
+                        const syncLyrics = () => {{
+                            const video = window.parent.document.querySelector('video');
+                            const lyrics = {lyrics_json};
+                            const display = window.parent.document.getElementById('lyric-text');
+                            const nextDisplay = window.parent.document.getElementById('lyric-next');
 
-                        function onPlayerStateChange(event) {{
-                            if (event.data == YT.PlayerState.PLAYING) {{
-                                setInterval(function() {{
-                                    var currentTime = player.getCurrentTime();
-                                    var activeIdx = -1;
+                            if (video) {{
+                                video.ontimeupdate = () => {{
+                                    const currentTime = video.currentTime;
+                                    let activeIdx = -1;
                                     for (let i = 0; i < lyrics.length; i++) {{
                                         if (currentTime >= lyrics[i].time) activeIdx = i;
                                         else break;
                                     }}
                                     if (activeIdx !== -1) {{
-                                        window.parent.document.getElementById('lyric-text').innerText = lyrics[activeIdx].text;
-                                        window.parent.document.getElementById('lyric-next').innerText = lyrics[activeIdx+1] ? "Siguiente: " + lyrics[activeIdx+1].text : "";
+                                        display.innerText = lyrics[activeIdx].text;
+                                        nextDisplay.innerText = lyrics[activeIdx+1] ? "Siguiente: " + lyrics[activeIdx+1].text : "";
                                     }}
-                                }}, 500);
+                                }};
                             }}
-                        }}
+                        }};
+                        // Intentamos conectar con el video tras un breve delay
+                        setTimeout(syncLyrics, 2000);
                     </script>
                 """, unsafe_allow_html=True)
             else:
-                st.error("No se pudo encontrar el video o la letra.")
+                st.error("No se pudo encontrar el video o la letra sincronizada.")
